@@ -27,7 +27,7 @@ Flashbots RPC 是一款面向以太坊普通用户的免费产品，你只需要
 1. 点击 Metamask 顶部的网络按钮（默认显示 `Ethereum Mainnet`），然后点击底部的 `Add network` 按钮添加网络节点（新版 Metamask 还需要在下一个页面点击 `Add a network manually` 按钮）。
 2. 依次输入网络参数:
 
-```
+```tex
 Network name: Flashbots RPC
 New RPC URL: https://rpc.flashbots.net
 Chain ID: 1
@@ -57,7 +57,7 @@ npm install --save @flashbots/ethers-provider-bundle
 
 1. 创建一个连接到非Flashbots RPC的普通provider，这里我们使用 Alchemy 提供的 Goerli 测试网节点。
 
-```
+```js
 // 1. 普通rpc (非flashbot rpc)
 const PRIVATE_KEY = process.env.PRIVATE_KEY
 const ALCHEMY_GOERLI_URL = process.env.ALCHEMY_GOERLI_URL 
@@ -70,14 +70,14 @@ const provider = new ethers.providers.JsonRpcProvider(ALCHEMY_GOERLI_URL)
 
 > 注意: 这个账户不要储存资金，它不是flashbots主私钥。
 
-```
+```js
 const AUTH_KEY = process.env.AUTH_KEY
 const authSigner = new ethers.Wallet(AUTH_KEY, provider)
 ```
 
 3. 创建 Flashbots RPC (测试网），用于发送交易，这里用到了普通provider和声誉私钥。
 
-```sol
+```js
     const flashbotsProvider = await FlashbotsBundleProvider.create(
         provider,
         authSigner,
@@ -89,7 +89,7 @@ const authSigner = new ethers.Wallet(AUTH_KEY, provider)
 
 4. 创建一笔符合 `EIP1559` 标准的交易，交易内容: 发送 0.001 ETH 测试币到 WTF Academy 地址。这里用到了钱包私钥（含资产）以及普通provider
 
-```
+```js
     const privateKey = process.env.PRIVATE_KEY
     const wallet = new ethers.Wallet(privateKey, provider)
 
@@ -120,7 +120,7 @@ const authSigner = new ethers.Wallet(AUTH_KEY, provider)
 
 6. 模拟交易并打印交易详情。bundle 要模拟成功后才能被执行。这里用到了flashbots provider的 `signBundle()` 和 `simulate()` 方法。注意，`simulate()` 方法需要指定交易执行的目标区块高度，这里用的下一个区块。
 
-```
+```js
     // 签名交易
     const signedTransactions = await flashbotsProvider.signBundle(transactionBundle)
     // 设置交易的目标执行区块
@@ -148,7 +148,7 @@ const authSigner = new ethers.Wallet(AUTH_KEY, provider)
 
    ![](./img/25-5.jpg)
 
-```
+```js
     // 7. 发送交易上链
     // 因为测试网Flashbots的节点很少，需要尝试很多次才能成功上链，这里我们循环发送 100 个区块。
     for(let i=1; i <=100; i++){
@@ -178,6 +178,8 @@ const authSigner = new ethers.Wallet(AUTH_KEY, provider)
 ## 总结
 
 这一讲，我们介绍了 Flashbots 的几款产品，并着重介绍了保护普通用户免受恶意 MEV 侵害的的 Flashbots RPC网络节点和面向开发者的 Flashbots Bundle，最后写了一个发送 Flashbots Bundle 的脚本。
+
+
 
 
 
