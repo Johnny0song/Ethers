@@ -36,6 +36,7 @@ Block Explorer URL: https://etherscan.io
 ```
 
 完成这两步，你的加密钱包就成功的连接到了 Flashbots RPC，之后你只需要像往常一样操作钱包就可以避免三明治攻击了！
+
 ### Flashbots Bundle
 
 在区块链上搜索 MEV 机会的开发者被称为`搜索者`。Flashbots Bundle（交易包）是一款帮助搜索者提取以太坊交易中 MEV 的工具。搜索者可以利用它将多笔交易组合在一起，按照指定的顺序执行。
@@ -51,3 +52,132 @@ Flashbots 提供了 [ethers-provider-flashbots-bundle](https://github.com/flashb
 ```
 npm install --save @flashbots/ethers-provider-bundle
 ```
+
+下面，我们利用它写一个脚本，给大家演示如何在 Goerli 测试网发送 Flashbots Bundle。
+
+1. 创建一个连接到非Flashbots RPC的普通provider，这里我们使用 Alchemy 提供的 Goerli 测试网节点。
+
+```
+// 1. 普通rpc (非flashbot rpc)
+const PRIVATE_KEY = process.env.PRIVATE_KEY
+const ALCHEMY_GOERLI_URL = process.env.ALCHEMY_GOERLI_URL 
+const provider = new ethers.providers.JsonRpcProvider(ALCHEMY_GOERLI_URL)
+```
+
+这里用到了[.env文件为NodeJS加载环境变量](https://cloud.tencent.com/developer/article/1817105)
+
+2. 创建 Flashbots `声誉私钥`，用于建立“声誉”，[详情](https://docs.flashbots.net/flashbots-auction/searchers/advanced/reputation)
+
+> 注意: 这个账户不要储存资金，它不是flashbots主私钥。
+
+```
+const AUTH_KEY = process.env.AUTH_KEY
+const authSigner = new ethers.Wallet(AUTH_KEY, provider)
+```
+
+3. 创建 Flashbots RPC (测试网），用于发送交易，这里用到了普通provider和声誉私钥。
+
+```sol
+    const flashbotsProvider = await FlashbotsBundleProvider.create(
+        provider,
+        authSigner,
+        // 使用主网 Flashbots，需要把下面两行删去
+        'https://relay-goerli.flashbots.net/', 
+        'goerli'
+    )
+```
+
+4. 创建一笔符合 `EIP1559` 标准的交易，交易内容: 发送 0.001 ETH 测试币到 WTF Academy 地址。这里用到了钱包私钥（含资产）以及普通provider
+
+```
+    const privateKey = process.env.PRIVATE_KEY
+    const wallet = new ethers.Wallet(privateKey, provider)
+
+    // EIP 1559 transaction
+    const transaction0 = {
+        chainId: CHAIN_ID,
+        type: 2,
+        to: "0x5DE49507374904E9D797E79C499CB8ECead6AB62",
+        value: ethers.utils.parseEther("0.001"),
+        maxFeePerGas: GWEI * 100n
+    }
+```
+
+5. 创建交易Bundle，这里我们只打包了一笔交易，实际使用中可以打包多笔签名过或未签名的交易。
+
+```js
+    const transactionBundle = [
+        {
+            signer: wallet,  // ethers signer 
+            transaction: transaction0 // ethers populated transaction object
+        }
+        // 也可以加入mempool中签名好的交易（可以是任何人发送的）
+        // ,{
+        //     signedTransaction: SIGNED_ORACLE_UPDATE_FROM_PENDING_POOL // serialized signed transaction hex
+        // }
+    ]
+```
+
+6. 模拟交易并打印交易详情。bundle 要模拟成功后才能被执行。这里用到了flashbots provider的 `signBundle()` 和 `simulate()` 方法。注意，`simulate()` 方法需要指定交易执行的目标区块高度，这里用的下一个区块。
+
+```
+    // 签名交易
+    const signedTransactions = await flashbotsProvider.signBundle(transactionBundle)
+    // 设置交易的目标执行区块
+    const targetBlockNumber = (await provider.getBlockNumber()) + 1
+    // 模拟
+    const simulation = await flashbotsProvider.simulate(signedTransactions, targetBlockNumber)
+    // 检查模拟是否成功
+    if("error" in simulation){
+        console.log(`模拟交易出错: ${simulation.error.message}`);
+    }else {
+        console.log(`模拟交易成功`);
+        console.log(JSON.stringify(simulation, null, 2))
+    }
+```
+
+![](./img/25-4.jpg)
+
+7. 发送交易 Bundle 上链。由于 Flashbots Bundle 需要指定执行的区块高度，且测试网Flashbots的节点很少，需要尝试很多次才能成功上链，所以我们用了一个循环，让 bundle 在未来的 100 个区块内依次尝试执行。我们用到了 flashbots provider 的 `sendRawBundle()` 方法发送 bundle。交易结果有三种状态：
+
+   - `BundleIncluded`: bundle 成功上链。
+   - `BlockPassedWithoutInclusion`: bunddle 未成功上链，需要继续尝试。
+   - `AccountNonceTooHigh`: Nonce 设置有错。
+
+   从下图可以看到，我们提交的 bundle 在16次尝试后成功上链。
+
+   ![](./img/25-5.jpg)
+
+```
+    // 7. 发送交易上链
+    // 因为测试网Flashbots的节点很少，需要尝试很多次才能成功上链，这里我们循环发送 100 个区块。
+    for(let i=1; i <=100; i++){
+        let targetBlockNumberNew = targetBlockNumber + i -1
+        // 发送交易 
+        const res = await flashbotsProvider.sendRawBundle(signedTransactions, targetBlockNumberNew)
+        if ("error" in res){
+            throw new Error(res.error.message)
+        }
+        // 检查交易是否上链
+        const bundleResolution = await res.wait()
+        // 交易有三个状态: 成功上链/没有上链/Nonce过高
+        if (bundleResolution == FlashbotsBundleResolution.BundleIncluded){
+            console.log(`恭喜, 交易成功上链，区块: ${targetBlockNumberNew}`);
+            console.log(JSON.stringify(res, null, 2));
+            process.exit(0);
+        } else if (bundleResolution == FlashbotsBundleResolution.BlockPassedWithoutInclusion){
+            console.log(`请重试, 交易没有被纳入区块: ${targetBlockNumberNew}`);
+        } else if (bundleResolution == FlashbotsBundleResolution.AccountNonceTooHigh){
+            console.log("Nonce 太高，请重新设置");
+            process.exit(1);
+        }
+
+    }
+```
+
+## 总结
+
+这一讲，我们介绍了 Flashbots 的几款产品，并着重介绍了保护普通用户免受恶意 MEV 侵害的的 Flashbots RPC网络节点和面向开发者的 Flashbots Bundle，最后写了一个发送 Flashbots Bundle 的脚本。
+
+
+
