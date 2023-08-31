@@ -10,6 +10,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ethers": "^6.7.1"
+    "dotenv": "^16.3.1",
+    "@flashbots/ethers-provider-bundle": "^0.6.1",
+    "ethers": "^5.7.1",
+    "merkletreejs": "^0.2.32"
   }
 }
