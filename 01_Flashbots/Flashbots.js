@@ -6,7 +6,7 @@ dotenv.config()
 const GWEI = 10n ** 9n;
 const CHAIN_ID = 5;  // goerli测试网，如果用主网，chainid 改为 1
 
-// 1. 普通rpc (非flash)
+// 1. 普通rpc (非flashbot rpc)
 const PRIVATE_KEY = process.env.PRIVATE_KEY
 const ALCHEMY_GOERLI_URL = process.env.ALCHEMY_GOERLI_URL 
 const provider = new ethers.providers.JsonRpcProvider(ALCHEMY_GOERLI_URL)
